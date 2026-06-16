@@ -57,6 +57,8 @@ class Cat(object):
         self.angle = 0
         self.size = 50
         self.energy = 5  # 能量
+        # 动作互斥锁：保护 up/down/defend/beat/hurt 的"检查-置位"原子性
+        self._action_lock = threading.RLock()
         self.energyStatus = [
             pygame.transform.scale(pygame.image.load(os.path.join("images", "energy0.png")), (300, 50)),
             pygame.transform.scale(pygame.image.load(os.path.join("images", "energy1.png")), (300, 50)),
@@ -66,109 +68,184 @@ class Cat(object):
             pygame.transform.scale(pygame.image.load(os.path.join("images", "energy5.png")), (300, 50)),
         ]
 
+    def get_position(self):
+        with self._action_lock:
+            return self.catX, self.catY
+
+    def _try_start_jump(self, current_status, jump_status):
+        with self._action_lock:
+            if self.jumpStatues or self.statues != current_status:
+                return False
+            self.jumpStatues = True
+            self.statues = jump_status
+            return True
+
+    def _finish_jump(self, final_status):
+        with self._action_lock:
+            self.statues = final_status
+            self.jumpStatues = False
+
+    def _move_y(self, distance):
+        with self._action_lock:
+            self.catY += distance
+
+    def _try_set_status(self, current_status, new_status):
+        with self._action_lock:
+            if self.statues != current_status:
+                return False
+            self.statues = new_status
+            return True
+
+    def _set_status(self, status):
+        with self._action_lock:
+            self.statues = status
+
+    def _start_beat(self):
+        with self._action_lock:
+            if self.energy != 5:
+                return False
+            self.beatS = True
+            self.energy -= 5
+            self.angle = 0
+            return True
+
+    def _set_beat_start(self, x, y):
+        with self._action_lock:
+            self.now_x = x
+            self.now_y = y
+
+    def _beat_y_less_than(self, target_y):
+        with self._action_lock:
+            return self.now_y < target_y
+
+    def _move_beat(self, move_x_speed, move_y_speed, rotation_speed, size_rate):
+        with self._action_lock:
+            self.now_x += move_x_speed
+            self.now_y += move_y_speed
+            self.angle += rotation_speed
+            self.size *= size_rate
+
+    def stop_beat(self):
+        with self._action_lock:
+            self.beatS = False
+
+    def _start_defend(self):
+        with self._action_lock:
+            if self.defendStatus or self.energy != 5:
+                return False
+            self.defendStatus = True
+            self.energy -= 5
+            return True
+
+    def _finish_defend(self):
+        with self._action_lock:
+            self.defendStatus = False
+
+    def _start_hurt(self):
+        with self._action_lock:
+            if self.hurtStatus:
+                return False
+            self.hurtStatus = True
+            return True
+
+    def _finish_hurt(self):
+        with self._action_lock:
+            self.hurtStatus = False
+
     def up(self):
-        if self.jumpStatues == False and self.statues == 0:
-            self.jumpStatues = True
-            self.statues = 1
+        if self._try_start_jump(0, 1):
             for i in range(10):  # 上升
                 time.sleep(0.02)
-                self.catY = self.catY - 10
+                self._move_y(-10)
             # 停留
             time.sleep(0.5)
             for i in range(10):  # 下降
                 time.sleep(0.02)
-                self.catY = self.catY + 10
-            self.statues = 0
-            self.jumpStatues = False
-        elif self.jumpStatues == False and self.statues == 3:
-            self.jumpStatues = True
-            self.statues = 4
+                self._move_y(10)
+            self._finish_jump(0)
+        elif self._try_start_jump(3, 4):
             for i in range(10):  # 上升
                 time.sleep(0.02)
-                self.catY = self.catY - 10
+                self._move_y(-10)
             # 停留
             time.sleep(0.5)
             for i in range(10):  # 下降
                 time.sleep(0.02)
-                self.catY = self.catY + 10
-            self.statues = 3
-            self.jumpStatues = False
+                self._move_y(10)
+            self._finish_jump(3)
 
     def down(self):
-        if self.statues == 0:
-            self.statues = 2
+        if self._try_set_status(0, 2):
             time.sleep(0.9)
-            self.statues = 0
-        elif self.statues == 3:
-            self.statues = 5
+            self._set_status(0)
+        elif self._try_set_status(3, 5):
             time.sleep(0.9)
-            self.statues = 3
+            self._set_status(3)
 
     def left(self):
-        if self.jumpStatues:
-            self.statues = 4
-        else:
-            self.statues = 3
-        if self.catX > x_min:
-            self.catX = self.catX - 5
+        with self._action_lock:
+            if self.jumpStatues:
+                self.statues = 4
+            else:
+                self.statues = 3
+            if self.catX > x_min:
+                self.catX = self.catX - 5
 
     def right(self):
-        if self.jumpStatues:
-            self.statues = 1
-        else:
-            self.statues = 0
-        if self.catX < x_max:
-            self.catX = self.catX + 5
+        with self._action_lock:
+            if self.jumpStatues:
+                self.statues = 1
+            else:
+                self.statues = 0
+            if self.catX < x_max:
+                self.catX = self.catX + 5
 
     def beat(self, dog):
-        if self.energy == 5:
-            self.beatS = True
-            self.useenergy()
-            self.angle = 0
+        if self._start_beat():
             rotation_speed = 360 / times
 
-            target_y = dog.dogY
-            target_x = dog.dogX
+            target_x, target_y = dog.get_position()
+            start_x, start_y = self.get_position()
 
-            move_x_speed = (target_x - self.catX) // times
-            move_y_speed = (target_y - self.catY) // times
-            self.now_y = self.catY
-            self.now_x = self.catX
-            while self.now_y < target_y:
-                self.now_x += move_x_speed
-                self.now_y += move_y_speed
-                self.angle += rotation_speed
-                self.size *= 1.02
+            move_x_speed = (target_x - start_x) // times
+            move_y_speed = (target_y - start_y) // times
+            self._set_beat_start(start_x, start_y)
+            while self._beat_y_less_than(target_y):
+                self._move_beat(move_x_speed, move_y_speed, rotation_speed, 1.02)
                 time.sleep(0.02)
-            self.beatS = False
+            self.stop_beat()
 
 
 
     def defend(self):
-        if not self.defendStatus and self.energy == 5:
-            self.defendStatus = True
-            self.useenergy()
+        if self._start_defend():
             time.sleep(defenceTime)
-            self.defendStatus = False
+            self._finish_defend()
 
     def getenergy(self):  # 获得能量
-        if not self.defendStatus and self.energy < 5:
-            self.energy += 1
+        with self._action_lock:
+            if not self.defendStatus and self.energy < 5:
+                self.energy += 1
 
     def useenergy(self):
-        if self.energy >= 5:
-            self.energy -= 5
+        with self._action_lock:
+            if self.energy >= 5:
+                self.energy -= 5
 
     def cutlive(self):  # 扣除生命
-        if not self.defendStatus:
-            self.health -= 1
+        should_play_sound = False
+        with self._action_lock:
+            if not self.defendStatus:
+                self.health -= 1
+                should_play_sound = True
+        if should_play_sound:
             Cat_sound()
+
     def hurt(self):
-        if not self.hurtStatus:
-            self.hurtStatus = True
+        if self._start_hurt():
             self.cutlive()
             time.sleep(defenceTime)
-            self.hurtStatus = False
+            self._finish_hurt()
 
 
 class Dog(object):
@@ -201,6 +278,9 @@ class Dog(object):
         self.now_y = 0
         self.angle = 0
         self.energy = 5  # 能量
+        # 动作互斥锁：保护 up/down/defend/beat/hurt 的"检查-置位"原子性
+        self._action_lock = threading.RLock()
+        self._action_lock = threading.RLock()
         self.energyStatus = [
             pygame.transform.scale(pygame.image.load(os.path.join("images", "energy0.png")), (300, 50)),
             pygame.transform.scale(pygame.image.load(os.path.join("images", "energy1.png")), (300, 50)),
@@ -210,83 +290,153 @@ class Dog(object):
             pygame.transform.scale(pygame.image.load(os.path.join("images", "energy5.png")), (300, 50)),
         ]
 
+    def get_position(self):
+        with self._action_lock:
+            return self.dogX, self.dogY
+
+    def _try_start_jump(self, current_status, jump_status):
+        with self._action_lock:
+            if self.jumpStatues or self.statues != current_status:
+                return False
+            self.jumpStatues = True
+            self.statues = jump_status
+            return True
+
+    def _finish_jump(self, final_status):
+        with self._action_lock:
+            self.statues = final_status
+            self.jumpStatues = False
+
+    def _move_y(self, distance):
+        with self._action_lock:
+            self.dogY += distance
+
+    def _try_set_status(self, current_status, new_status):
+        with self._action_lock:
+            if self.statues != current_status:
+                return False
+            self.statues = new_status
+            return True
+
+    def _set_status(self, status):
+        with self._action_lock:
+            self.statues = status
+
+    def _start_beat(self):
+        with self._action_lock:
+            if self.energy != 5:
+                return False
+            self.beatS = True
+            self.energy -= 5
+            self.angle = 0
+            return True
+
+    def _set_beat_start(self, x, y):
+        with self._action_lock:
+            self.now_x = x
+            self.now_y = y
+
+    def _beat_y_greater_than(self, target_y):
+        with self._action_lock:
+            return self.now_y > target_y
+
+    def _move_beat(self, move_x_speed, move_y_speed, rotation_speed, size_rate):
+        with self._action_lock:
+            self.now_x += move_x_speed
+            self.now_y += move_y_speed
+            self.angle += rotation_speed
+            self.size *= size_rate
+
+    def stop_beat(self):
+        with self._action_lock:
+            self.beatS = False
+
+    def _start_defend(self):
+        with self._action_lock:
+            if self.defendStatus or self.energy != 5:
+                return False
+            self.defendStatus = True
+            self.energy -= 5
+            return True
+
+    def _finish_defend(self):
+        with self._action_lock:
+            self.defendStatus = False
+
+    def _start_hurt(self):
+        with self._action_lock:
+            if self.hurtStatus:
+                return False
+            self.hurtStatus = True
+            return True
+
+    def _finish_hurt(self):
+        with self._action_lock:
+            self.hurtStatus = False
+
     def up(self):
-        if self.jumpStatues == False and self.statues == 0:
-            self.jumpStatues = True
-            self.statues = 1
+        if self._try_start_jump(0, 1):
             for i in range(10):  # 上升
                 time.sleep(0.02)
-                self.dogY = self.dogY - 10
+                self._move_y(-10)
             # 停留
             time.sleep(0.5)
             for i in range(10):  # 下降
                 time.sleep(0.02)
-                self.dogY = self.dogY + 10
-            self.statues = 0
-            self.jumpStatues = False
-        elif self.jumpStatues == False and self.statues == 3:
-            self.jumpStatues = True
-            self.statues = 4
+                self._move_y(10)
+            self._finish_jump(0)
+        elif self._try_start_jump(3, 4):
             for i in range(10):  # 上升
                 time.sleep(0.02)
-                self.dogY = self.dogY - 10
+                self._move_y(-10)
             # 停留
             time.sleep(0.5)
             for i in range(10):  # 下降
                 time.sleep(0.02)
-                self.dogY = self.dogY + 10
-            self.statues = 3
-            self.jumpStatues = False
+                self._move_y(10)
+            self._finish_jump(3)
 
     def down(self):
-        if self.statues == 0:
-            self.statues = 2
+        if self._try_set_status(0, 2):
             time.sleep(0.9)
-            self.statues = 0
-        elif self.statues == 3:
-            self.statues = 5
+            self._set_status(0)
+        elif self._try_set_status(3, 5):
             time.sleep(0.9)
-            self.statues = 3
+            self._set_status(3)
 
     def left(self):
-        if self.jumpStatues:
-            self.statues = 4
-        else:
-            self.statues = 3
-        if self.dogX > x_min:
-            self.dogX = self.dogX - 5
+        with self._action_lock:
+            if self.jumpStatues:
+                self.statues = 4
+            else:
+                self.statues = 3
+            if self.dogX > x_min:
+                self.dogX = self.dogX - 5
 
     def right(self):
-        if self.jumpStatues:
-            self.statues = 1
-        else:
-            self.statues = 0
-        if self.dogX < x_max:
-            self.dogX = self.dogX + 5
+        with self._action_lock:
+            if self.jumpStatues:
+                self.statues = 1
+            else:
+                self.statues = 0
+            if self.dogX < x_max:
+                self.dogX = self.dogX + 5
 
     def beat(self, cat):
-        if self.energy == 5:
-            self.beatS = True
-            self.useenergy()
-            self.angle = 0
+        if self._start_beat():
             rotation_speed = 360 / times
 
-            target_y = cat.catY
+            target_x, target_y = cat.get_position()
+            start_x, start_y = self.get_position()
 
 
-            target_x = cat.catX
-
-            move_x_speed = (target_x - self.dogX) // times
-            move_y_speed = (target_y - self.dogY) // times
-            self.now_y = self.dogY
-            self.now_x = self.dogX
-            while self.now_y > target_y:
-                self.now_x += move_x_speed
-                self.now_y += move_y_speed
-                self.angle += rotation_speed
-                self.size *= 1.01
+            move_x_speed = (target_x - start_x) // times
+            move_y_speed = (target_y - start_y) // times
+            self._set_beat_start(start_x, start_y)
+            while self._beat_y_greater_than(target_y):
+                self._move_beat(move_x_speed, move_y_speed, rotation_speed, 1.01)
                 time.sleep(0.02)
-            self.beatS = False
+            self.stop_beat()
 
 
     def getDefend(self):
@@ -297,28 +447,31 @@ class Dog(object):
             screen.blit(finalImage, finalRect)
 
     def defend(self):
-        if not self.defendStatus and self.energy == 5:
-            self.defendStatus = True
-            self.useenergy()
+        if self._start_defend():
             time.sleep(defenceTime)
-            self.defendStatus = False
+            self._finish_defend()
 
     def getenergy(self):  # 获得能量
-        if not self.defendStatus and self.energy < 5:
-            self.energy += 1
+        with self._action_lock:
+            if not self.defendStatus and self.energy < 5:
+                self.energy += 1
 
     def useenergy(self):
-        if self.energy >= 5:
-            self.energy -= 5
+        with self._action_lock:
+            if self.energy >= 5:
+                self.energy -= 5
 
     def cutlive(self):  # 扣除生命
-        if not self.defendStatus:
-            self.health -= 1
+        should_play_sound = False
+        with self._action_lock:
+            if not self.defendStatus:
+                self.health -= 1
+                should_play_sound = True
+        if should_play_sound:
             Dog_sound()
 
     def hurt(self):
-        if not self.hurtStatus:
-            self.hurtStatus = True
+        if self._start_hurt():
             self.cutlive()
             time.sleep(defenceTime)
-            self.hurtStatus = False
+            self._finish_hurt()
