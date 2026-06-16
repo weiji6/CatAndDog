@@ -1,5 +1,3 @@
-import threading
-
 import pygame
 import sys
 import os
@@ -18,98 +16,6 @@ from mod.map import screen
 from mod.map import start
 
 
-class DogJumpThread(threading.Thread):
-    def __init__(self, dog):
-        super().__init__()
-        self.dog = dog
-
-    def run(self):
-        self.dog.up()
-
-
-class CatJumpThread(threading.Thread):
-    def __init__(self, cat):
-        super().__init__()
-        self.cat = cat
-
-    def run(self):
-        self.cat.up()
-
-
-class DogDownThread(threading.Thread):
-    def __init__(self, dog):
-        super().__init__()
-        self.dog = dog
-
-    def run(self):
-        self.dog.down()
-
-
-class CatDownThread(threading.Thread):
-    def __init__(self, cat):
-        super().__init__()
-        self.cat = cat
-
-    def run(self):
-        self.cat.down()
-
-
-class DogDefendThread(threading.Thread):
-    def __init__(self, dog):
-        super().__init__()
-        self.dog = dog
-
-    def run(self):
-        self.dog.defend()
-
-
-class CatDefendThread(threading.Thread):
-    def __init__(self, cat):
-        super().__init__()
-        self.cat = cat
-
-    def run(self):
-        self.cat.defend()
-
-
-class CatBeatThread(threading.Thread):
-    def __init__(self, cat, dog):
-        super().__init__()
-        self.dog = dog
-        self.cat = cat
-
-    def run(self):
-        self.cat.beat(self.dog)
-
-
-class DogBeatThread(threading.Thread):
-    def __init__(self, cat, dog):
-        super().__init__()
-        self.dog = dog
-        self.cat = cat
-
-    def run(self):
-        self.dog.beat(self.cat)
-
-
-class DogHurtThread(threading.Thread):
-    def __init__(self, dog):
-        super().__init__()
-        self.dog = dog
-
-    def run(self):
-        self.dog.hurt()
-
-
-class CatHurtThread(threading.Thread):
-    def __init__(self, cat):
-        super().__init__()
-        self.cat = cat
-
-    def run(self):
-        self.cat.hurt()
-
-
 def music_play():
     pygame.mixer.music.load(os.path.join("music", "music.mp3"))
     pygame.mixer.music.play(-1)  # 循环播放音乐
@@ -126,6 +32,7 @@ def Play():
             dog_alive = dog.health > 0
         if not cat_alive or not dog_alive:
             break
+        dt = clock.tick(100) / 1000
 
         count += 1
         if count == 7:
@@ -140,32 +47,34 @@ def Play():
 
         # 猫的控制
         if key[pygame.K_w]:
-            CatJumpThread(cat).start()
+            cat.up()
         elif key[pygame.K_s]:
-            CatDownThread(cat).start()
+            cat.down()
         elif key[pygame.K_a]:
             cat.left()
         elif key[pygame.K_d]:
             cat.right()
         elif key[pygame.K_j]:
-            CatBeatThread(cat, dog).start()
+            cat.beat(dog)
         elif key[pygame.K_k]:
-            # CatgetDefendThread(cat).start()
-            CatDefendThread(cat).start()
+            cat.defend()
 
         # 狗的控制
         if key[pygame.K_UP]:
-            DogJumpThread(dog).start()
+            dog.up()
         elif key[pygame.K_DOWN]:
-            DogDownThread(dog).start()
+            dog.down()
         elif key[pygame.K_LEFT]:
             dog.left()
         elif key[pygame.K_RIGHT]:
             dog.right()
         elif key[pygame.K_KP1]:
-            DogBeatThread(cat, dog).start()
+            dog.beat(cat)
         elif key[pygame.K_KP2]:
-            DogDefendThread(dog).start()
+            dog.defend()
+
+        cat.update(dt)
+        dog.update(dt)
 
         mod.map.create_map()  # 每帧重新绘制背景
 
@@ -228,7 +137,7 @@ def Play():
             beatRect.bottomleft = (cat_beat_x, cat_beat_y)
             screen.blit(cat_beatImage, beatRect)
             if dog_image_rect.colliderect(beatRect):
-                DogHurtThread(dog).start()
+                dog.hurt()
                 cat.stop_beat()
 
         if dog_beatS:
@@ -238,7 +147,7 @@ def Play():
             beatRect.bottomleft = (dog_beat_x, dog_beat_y)
             screen.blit(dog_beatImage, beatRect)
             if cat_image_rect.colliderect(beatRect):
-                CatHurtThread(cat).start()
+                cat.hurt()
                 dog.stop_beat()
 
         if cat_defendStatus:
@@ -271,7 +180,7 @@ def Play():
             creatcatObstacle()
 
         # 移动障碍物
-        # 复制当前的障碍物的副本并游历
+        # 复制当前的障碍物的副本并遍历
         for obstacle in obstaclelist[:]:
             obstacle.move()
             obstacle_destroyed = False
@@ -282,7 +191,7 @@ def Play():
                     obstacle.destroy()
                     obstacle_destroyed = True
                 elif obstacle.type in DAMAGE_OBSTACLE_TYPES:
-                    DogHurtThread(dog).start()
+                    dog.hurt()
                     obstacle.destroy()
                     obstacle_destroyed = True
             if not obstacle_destroyed and cat_image_rect.colliderect(obstacle.obstacleRect):
@@ -291,7 +200,7 @@ def Play():
                     obstacle.destroy()
                     obstacle_destroyed = True
                 elif obstacle.type in DAMAGE_OBSTACLE_TYPES:
-                    CatHurtThread(cat).start()
+                    cat.hurt()
                     obstacle.destroy()
                     obstacle_destroyed = True
             if not obstacle_destroyed:
@@ -308,7 +217,6 @@ def Play():
             screen.blit(obstacle.obstacleStatus, obstacle.obstacleRect)
 
         pygame.display.flip()
-        clock.tick(100)  # 控制帧率
 
     with dog._action_lock:
         dog_won = dog.health > 0
@@ -348,4 +256,3 @@ if __name__ == "__main__":
 
     while start():
         Play()
-

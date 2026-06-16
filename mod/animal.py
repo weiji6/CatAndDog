@@ -1,6 +1,5 @@
 import os
 import threading
-import time
 
 import pygame
 
@@ -96,6 +95,20 @@ class Animal(object):
         self.now_y = 0
         self.angle = 0
         self.energy = 5
+        self._base_y = start_y
+        self._jump_elapsed = 0
+        self._jump_duration = 0.9
+        self._jump_height = 100
+        self._jump_landing_status = 0
+        self._down_elapsed = 0
+        self._down_duration = 0.9
+        self._down_final_status = 0
+        self._defend_elapsed = 0
+        self._hurt_elapsed = 0
+        self._beat_elapsed = 0
+        self._beat_duration = 1.2
+        self._beat_start = (0, 0)
+        self._beat_target = (0, 0)
 
         setattr(self, status_attr, load_character_status(image_prefix))
         setattr(self, health_attr, load_bar_images("heart"))
@@ -147,11 +160,13 @@ class Animal(object):
 
     def _start_beat(self):
         with self._action_lock:
-            if self.energy != 5:
+            if self.beatS or self.energy != 5:
                 return False
             self.beatS = True
             self.energy -= 5
             self.angle = 0
+            self.size = 50
+            self._beat_elapsed = 0
             return True
 
     def _set_beat_start(self, x, y):
@@ -175,6 +190,7 @@ class Animal(object):
     def stop_beat(self):
         with self._action_lock:
             self.beatS = False
+            self._beat_elapsed = 0
 
     def _start_defend(self):
         with self._action_lock:
@@ -182,50 +198,54 @@ class Animal(object):
                 return False
             self.defendStatus = True
             self.energy -= 5
+            self._defend_elapsed = 0
             return True
 
     def _finish_defend(self):
         with self._action_lock:
             self.defendStatus = False
+            self._defend_elapsed = 0
 
     def _start_hurt(self):
         with self._action_lock:
             if self.hurtStatus:
                 return False
             self.hurtStatus = True
+            self._hurt_elapsed = 0
             return True
 
     def _finish_hurt(self):
         with self._action_lock:
             self.hurtStatus = False
+            self._hurt_elapsed = 0
 
     def up(self):
-        if self._try_start_jump(0, 1):
-            landing_status = 0
-        elif self._try_start_jump(3, 4):
-            landing_status = 3
-        else:
-            return
-
-        for i in range(10):
-            time.sleep(0.02)
-            self._move_y(-10)
-        time.sleep(0.5)
-        for i in range(10):
-            time.sleep(0.02)
-            self._move_y(10)
-        self._finish_jump(landing_status)
+        with self._action_lock:
+            if self.jumpStatues:
+                return
+            if self.statues == 0:
+                self.statues = 1
+                self._jump_landing_status = 0
+            elif self.statues == 3:
+                self.statues = 4
+                self._jump_landing_status = 3
+            else:
+                return
+            self.jumpStatues = True
+            self._jump_elapsed = 0
+            self._base_y = self._get_y()
 
     def down(self):
-        if self._try_set_status(0, 2):
-            final_status = 0
-        elif self._try_set_status(3, 5):
-            final_status = 3
-        else:
-            return
-
-        time.sleep(0.9)
-        self._set_status(final_status)
+        with self._action_lock:
+            if self.statues == 0:
+                self.statues = 2
+                self._down_final_status = 0
+            elif self.statues == 3:
+                self.statues = 5
+                self._down_final_status = 3
+            else:
+                return
+            self._down_elapsed = 0
 
     def left(self):
         with self._action_lock:
@@ -249,22 +269,16 @@ class Animal(object):
         if not self._start_beat():
             return
 
-        rotation_speed = 360 / times
         target_x, target_y = target.get_position()
         start_x, start_y = self.get_position()
-        move_x_speed = (target_x - start_x) // times
-        move_y_speed = (target_y - start_y) // times
 
-        self._set_beat_start(start_x, start_y)
-        while self._should_continue_beat(target_y):
-            self._move_beat(move_x_speed, move_y_speed, rotation_speed)
-            time.sleep(0.02)
-        self.stop_beat()
+        with self._action_lock:
+            self._beat_start = (start_x, start_y)
+            self._beat_target = (target_x, target_y)
+            self._set_beat_start(start_x, start_y)
 
     def defend(self):
-        if self._start_defend():
-            time.sleep(defenceTime)
-            self._finish_defend()
+        self._start_defend()
 
     def getenergy(self):
         with self._action_lock:
@@ -288,8 +302,73 @@ class Animal(object):
     def hurt(self):
         if self._start_hurt():
             self.cutlive()
-            time.sleep(defenceTime)
-            self._finish_hurt()
+
+    def update(self, dt):
+        with self._action_lock:
+            self._update_jump(dt)
+            self._update_down(dt)
+            self._update_defend(dt)
+            self._update_hurt(dt)
+            self._update_beat(dt)
+
+    def _update_jump(self, dt):
+        if not self.jumpStatues:
+            return
+
+        self._jump_elapsed += dt
+        progress = min(1, self._jump_elapsed / self._jump_duration)
+        jump_offset = -self._jump_height * 4 * progress * (1 - progress)
+        self._set_y(self._base_y + jump_offset)
+
+        if progress >= 1:
+            self._set_y(self._base_y)
+            self.statues = self._jump_landing_status
+            self.jumpStatues = False
+            self._jump_elapsed = 0
+
+    def _update_down(self, dt):
+        if self.statues not in (2, 5):
+            return
+
+        self._down_elapsed += dt
+        if self._down_elapsed >= self._down_duration:
+            self.statues = self._down_final_status
+            self._down_elapsed = 0
+
+    def _update_defend(self, dt):
+        if not self.defendStatus:
+            return
+
+        self._defend_elapsed += dt
+        if self._defend_elapsed >= defenceTime:
+            self.defendStatus = False
+            self._defend_elapsed = 0
+
+    def _update_hurt(self, dt):
+        if not self.hurtStatus:
+            return
+
+        self._hurt_elapsed += dt
+        if self._hurt_elapsed >= defenceTime:
+            self.hurtStatus = False
+            self._hurt_elapsed = 0
+
+    def _update_beat(self, dt):
+        if not self.beatS:
+            return
+
+        self._beat_elapsed += dt
+        progress = min(1, self._beat_elapsed / self._beat_duration)
+        start_x, start_y = self._beat_start
+        target_x, target_y = self._beat_target
+        self.now_x = start_x + (target_x - start_x) * progress
+        self.now_y = start_y + (target_y - start_y) * progress
+        self.angle = 360 * progress
+        self.size = 50 * (self._beat_size_rate ** (times * progress))
+
+        if progress >= 1:
+            self.beatS = False
+            self._beat_elapsed = 0
 
 
 class Cat(Animal):
