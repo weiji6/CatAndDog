@@ -1,8 +1,6 @@
 import os
 import pygame
 import random
-import sys
-import time
 
 from mod.animal import cat_y, dog_y
 
@@ -11,12 +9,22 @@ y_max = 900
 y_min = 0
 x_max = 1000
 x_min = 50
-speed = 5
+speed = 500
 GROUND_OBSTACLE = 'ground_obstacle'
 AIR_OBSTACLE = 'air_obstacle'
 CAT_ENERGY = 'cat_sky'
 DOG_ENERGY = 'dog_sky'
 DAMAGE_OBSTACLE_TYPES = {GROUND_OBSTACLE, AIR_OBSTACLE}
+OBSTACLE_IMAGES = {}
+
+
+def get_obstacle_image(file_name):
+    if file_name not in OBSTACLE_IMAGES:
+        OBSTACLE_IMAGES[file_name] = pygame.transform.scale(
+            pygame.image.load(os.path.join("images", file_name)),
+            (50, 50),
+        )
+    return OBSTACLE_IMAGES[file_name]
 
 def creatcatObstacle():  # 创建障碍物
     i = random.randint(1, 130)
@@ -52,82 +60,86 @@ def createdogObstacle():
 
 class Obstacle1(object):  # 地上的障碍物
     def __init__(self):
-        self.obstacleStatus = pygame.transform.scale(pygame.image.load(os.path.join("images", "obstacle1.png")), (50, 50))
+        self.obstacleStatus = get_obstacle_image("obstacle1.png")
         self.obstacleRect = self.obstacleStatus.get_rect()
         self.speed = speed
         self.obstacleX = 1200
         self.obstacleY = 0
         self.type = GROUND_OBSTACLE
 
-    def move(self):
-        self.obstacleX -= self.speed
-        self.obstacleRect.bottomleft = (self.obstacleX, self.obstacleY)
+    def move(self, dt):
+        self.obstacleX -= self.speed * dt
+        self.obstacleRect.bottomleft = (int(self.obstacleX), int(self.obstacleY))
 
     def remove(self):
-        if self.obstacleX < 0:
+        if self.obstacleX < 0 and self in obstaclelist:
             obstaclelist.remove(self)
 
     def destroy(self):
-        obstaclelist.remove(self)
+        if self in obstaclelist:
+            obstaclelist.remove(self)
 
 
 class Obstacle2(object):  # 空中的障碍物
     def __init__(self):
-        self.obstacleStatus = pygame.transform.scale(pygame.image.load(os.path.join("images", "obstacle2.png")), (50, 50))
+        self.obstacleStatus = get_obstacle_image("obstacle2.png")
         self.obstacleRect = self.obstacleStatus.get_rect()
         self.speed = speed
         self.obstacleX = 1200
         self.obstacleY = 0
         self.type = AIR_OBSTACLE
 
-    def move(self):
-        self.obstacleX -= self.speed
-        self.obstacleRect.bottomleft = (self.obstacleX, self.obstacleY)
+    def move(self, dt):
+        self.obstacleX -= self.speed * dt
+        self.obstacleRect.bottomleft = (int(self.obstacleX), int(self.obstacleY))
 
     def remove(self):
-        if self.obstacleX <= 0:
+        if self.obstacleX <= 0 and self in obstaclelist:
             obstaclelist.remove(self)
 
     def destroy(self):
-        obstaclelist.remove(self)
+        if self in obstaclelist:
+            obstaclelist.remove(self)
 
 
 class Obstacle3(object):  # 天降的障碍物
     def __init__(self):
-        self.obstacleStatus = pygame.transform.scale(pygame.image.load(os.path.join("images", "fish.png")), (50, 50))
+        self.obstacleStatus = get_obstacle_image("fish.png")
         self.obstacleRect = self.obstacleStatus.get_rect()
         self.speed = speed
         self.obstacleX = 0
         self.obstacleY = 0
         self.type = CAT_ENERGY
 
-    def move(self):
-        self.obstacleY += self.speed
-        self.obstacleRect.bottomleft = (self.obstacleX, self.obstacleY)
+    def move(self, dt):
+        self.obstacleY += self.speed * dt
+        self.obstacleRect.bottomleft = (int(self.obstacleX), int(self.obstacleY))
 
     def remove(self):
-        if self.obstacleY >= 900:
+        if self.obstacleY >= 900 and self in obstaclelist:
             obstaclelist.remove(self)
 
     def destroy(self):
-        obstaclelist.remove(self)
+        if self in obstaclelist:
+            obstaclelist.remove(self)
 
 class Obstacle4(object):  # 天降的障碍物
     def __init__(self):
-        self.obstacleStatus = pygame.transform.scale(pygame.image.load(os.path.join("images", "bone.png")), (50, 50))
+        self.obstacleStatus = get_obstacle_image("bone.png")
         self.obstacleRect = self.obstacleStatus.get_rect()
         self.speed = speed
         self.obstacleX = 0
         self.obstacleY = 0
         self.type = DOG_ENERGY
 
-    def move(self):
-        self.obstacleY += self.speed
-        self.obstacleRect.bottomleft = (self.obstacleX, self.obstacleY)
+    def move(self, dt):
+        self.obstacleY += self.speed * dt
+        self.obstacleRect.bottomleft = (int(self.obstacleX), int(self.obstacleY))
 
     def remove(self):
-        if self.obstacleY >= 900:
+        if self.obstacleY >= 900 and self in obstaclelist:
             obstaclelist.remove(self)
 
     def destroy(self):
-        obstaclelist.remove(self)
+        if self in obstaclelist:
+            obstaclelist.remove(self)
