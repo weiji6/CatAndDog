@@ -12,6 +12,11 @@ y_min = 0
 x_max = 1000
 x_min = 50
 speed = 5
+GROUND_OBSTACLE = 'ground_obstacle'
+AIR_OBSTACLE = 'air_obstacle'
+CAT_ENERGY = 'cat_sky'
+DOG_ENERGY = 'dog_sky'
+DAMAGE_OBSTACLE_TYPES = {GROUND_OBSTACLE, AIR_OBSTACLE}
 
 def creatcatObstacle():  # 创建障碍物
     i = random.randint(1, 130)
@@ -52,7 +57,7 @@ class Obstacle1(object):  # 地上的障碍物
         self.speed = speed
         self.obstacleX = 1200
         self.obstacleY = 0
-        self.type = 'sky'
+        self.type = GROUND_OBSTACLE
 
     def move(self):
         self.obstacleX -= self.speed
@@ -73,7 +78,7 @@ class Obstacle2(object):  # 空中的障碍物
         self.speed = speed
         self.obstacleX = 1200
         self.obstacleY = 0
-        self.type = 'sky'
+        self.type = AIR_OBSTACLE
 
     def move(self):
         self.obstacleX -= self.speed
@@ -94,7 +99,7 @@ class Obstacle3(object):  # 天降的障碍物
         self.speed = speed
         self.obstacleX = 0
         self.obstacleY = 0
-        self.type = 'cat_sky'
+        self.type = CAT_ENERGY
 
     def move(self):
         self.obstacleY += self.speed
@@ -114,7 +119,7 @@ class Obstacle4(object):  # 天降的障碍物
         self.speed = speed
         self.obstacleX = 0
         self.obstacleY = 0
-        self.type = 'dog_sky'
+        self.type = DOG_ENERGY
 
     def move(self):
         self.obstacleY += self.speed

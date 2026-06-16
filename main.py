@@ -5,7 +5,14 @@ import sys
 import os
 import random
 import time
-from mod.obstacle import obstaclelist, createdogObstacle, creatcatObstacle
+from mod.obstacle import (
+    CAT_ENERGY,
+    DAMAGE_OBSTACLE_TYPES,
+    DOG_ENERGY,
+    obstaclelist,
+    createdogObstacle,
+    creatcatObstacle,
+)
 import mod.animal
 from mod.map import screen
 from mod.map import start
@@ -267,20 +274,28 @@ def Play():
         # 复制当前的障碍物的副本并游历
         for obstacle in obstaclelist[:]:
             obstacle.move()
+            obstacle_destroyed = False
             # 碰撞检测
             if dog_image_rect.colliderect(obstacle.obstacleRect):
-                if obstacle.type == 'dog_sky':
+                if obstacle.type == DOG_ENERGY:
                     dog.getenergy()
-                else:
+                    obstacle.destroy()
+                    obstacle_destroyed = True
+                elif obstacle.type in DAMAGE_OBSTACLE_TYPES:
                     DogHurtThread(dog).start()
-                obstacle.destroy()
-            if cat_image_rect.colliderect(obstacle.obstacleRect):
-                if obstacle.type == 'cat_sky':
+                    obstacle.destroy()
+                    obstacle_destroyed = True
+            if not obstacle_destroyed and cat_image_rect.colliderect(obstacle.obstacleRect):
+                if obstacle.type == CAT_ENERGY:
                     cat.getenergy()
-                else:
+                    obstacle.destroy()
+                    obstacle_destroyed = True
+                elif obstacle.type in DAMAGE_OBSTACLE_TYPES:
                     CatHurtThread(cat).start()
-                obstacle.destroy()
-            obstacle.remove()
+                    obstacle.destroy()
+                    obstacle_destroyed = True
+            if not obstacle_destroyed:
+                obstacle.remove()
 
         screen.blit(cat_image, cat_image_rect)
         screen.blit(dog_image, dog_image_rect)
