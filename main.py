@@ -89,39 +89,7 @@ def handle_movement_keys(cat, dog):
 
 
 def read_animal_snapshots(cat, dog):
-    with cat._action_lock:
-        cat_snapshot = {
-            "status": cat.statues,
-            "x": cat.catX,
-            "y": cat.catY,
-            "health": cat.health,
-            "energy": cat.energy,
-            "beatS": cat.beatS,
-            "beat_size": cat.size,
-            "beat_angle": cat.angle,
-            "beat_x": cat.now_x,
-            "beat_y": cat.now_y,
-            "defend": cat.defendStatus,
-            "hurt": cat.hurtStatus,
-        }
-
-    with dog._action_lock:
-        dog_snapshot = {
-            "status": dog.statues,
-            "x": dog.dogX,
-            "y": dog.dogY,
-            "health": dog.health,
-            "energy": dog.energy,
-            "beatS": dog.beatS,
-            "beat_size": dog.size,
-            "beat_angle": dog.angle,
-            "beat_x": dog.now_x,
-            "beat_y": dog.now_y,
-            "defend": dog.defendStatus,
-            "hurt": dog.hurtStatus,
-        }
-
-    return cat_snapshot, dog_snapshot
+    return cat.snapshot(), dog.snapshot()
 
 
 def draw_projectile(base_image, size, angle, x, y):
@@ -192,22 +160,18 @@ def Play():
     assets = load_game_assets()
     cat = mod.animal.Cat()
     dog = mod.animal.Dog()
-    count = 0
     q = 400
+    difficulty_timer = 0
 
     while True:
-        with cat._action_lock:
-            cat_alive = cat.health > 0
-        with dog._action_lock:
-            dog_alive = dog.health > 0
-        if not cat_alive or not dog_alive:
+        if not cat.is_alive() or not dog.is_alive():
             break
 
         dt = clock.tick(100) / 1000
-        count += 1
-        if count == 7:
-            count = 0
+        difficulty_timer += dt
+        while difficulty_timer >= 0.07:
             q = max(200, q - 1)
+            difficulty_timer -= 0.07
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -269,7 +233,7 @@ def Play():
             hurt_rect.bottomleft = (int(dog_snapshot["x"] + 15), int(dog_snapshot["y"] - 80))
             screen.blit(assets["hurt"], hurt_rect)
 
-        if random.randint(1, q) == 1:
+        if random.random() < dt * (100 / q):
             createdogObstacle()
             creatcatObstacle()
 
@@ -287,10 +251,7 @@ def Play():
 
         pygame.display.flip()
 
-    with dog._action_lock:
-        dog_won = dog.health > 0
-
-    if dog_won:
+    if dog.is_alive():
         final_rect = assets["dog_win"].get_rect()
         final_rect.bottomleft = (350, 650)
         empty_heart_rect = assets["empty_heart"].get_rect()

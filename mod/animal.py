@@ -3,8 +3,6 @@ import threading
 
 import pygame
 
-from mod.map import screen
-
 cat_x = 120
 cat_y = 400
 dog_x = 120
@@ -15,6 +13,8 @@ y_min = 0
 x_max = 1000
 x_min = 50
 times = 60
+MAX_HEALTH = 5
+MAX_ENERGY = 5
 
 
 def play_sound_effect(file_path, start_time, duration):
@@ -89,12 +89,12 @@ class Animal(object):
         setattr(self, y_attr, start_y)
         self.jumpStatues = False
         self.defendStatus = False
-        self.health = 5
+        self.health = MAX_HEALTH
         self.beatS = False
         self.now_x = 0
         self.now_y = 0
         self.angle = 0
-        self.energy = 5
+        self.energy = MAX_ENERGY
         self._base_y = start_y
         self._jump_elapsed = 0
         self._jump_duration = 0.9
@@ -130,6 +130,27 @@ class Animal(object):
         with self._action_lock:
             return self._get_x(), self._get_y()
 
+    def is_alive(self):
+        with self._action_lock:
+            return self.health > 0
+
+    def snapshot(self):
+        with self._action_lock:
+            return {
+                "status": self.statues,
+                "x": self._get_x(),
+                "y": self._get_y(),
+                "health": min(MAX_HEALTH, max(0, self.health)),
+                "energy": min(MAX_ENERGY, max(0, self.energy)),
+                "beatS": self.beatS,
+                "beat_size": self.size,
+                "beat_angle": self.angle,
+                "beat_x": self.now_x,
+                "beat_y": self.now_y,
+                "defend": self.defendStatus,
+                "hurt": self.hurtStatus,
+            }
+
     def _try_start_jump(self, current_status, jump_status):
         with self._action_lock:
             if self.jumpStatues or self.statues != current_status:
@@ -160,10 +181,10 @@ class Animal(object):
 
     def _start_beat(self):
         with self._action_lock:
-            if self.beatS or self.energy != 5:
+            if self.beatS or self.energy < MAX_ENERGY:
                 return False
             self.beatS = True
-            self.energy -= 5
+            self.energy = max(0, self.energy - MAX_ENERGY)
             self.angle = 0
             self.size = 50
             self._beat_elapsed = 0
@@ -194,10 +215,10 @@ class Animal(object):
 
     def _start_defend(self):
         with self._action_lock:
-            if self.defendStatus or self.energy != 5:
+            if self.defendStatus or self.energy < MAX_ENERGY:
                 return False
             self.defendStatus = True
-            self.energy -= 5
+            self.energy = max(0, self.energy - MAX_ENERGY)
             self._defend_elapsed = 0
             return True
 
@@ -282,19 +303,19 @@ class Animal(object):
 
     def getenergy(self):
         with self._action_lock:
-            if not self.defendStatus and self.energy < 5:
-                self.energy += 1
+            if not self.defendStatus:
+                self.energy = min(MAX_ENERGY, self.energy + 1)
 
     def useenergy(self):
         with self._action_lock:
-            if self.energy >= 5:
-                self.energy -= 5
+            if self.energy >= MAX_ENERGY:
+                self.energy = max(0, self.energy - MAX_ENERGY)
 
     def cutlive(self):
         should_play_sound = False
         with self._action_lock:
             if not self.defendStatus:
-                self.health -= 1
+                self.health = max(0, self.health - 1)
                 should_play_sound = True
         if should_play_sound:
             self._hurt_sound()
@@ -401,11 +422,3 @@ class Dog(Animal):
             beat_moves_down=False,
             beat_size_rate=1.01,
         )
-
-    def getDefend(self):
-        while self.defendStatus:
-            finalImage = pygame.transform.scale(pygame.image.load(os.path.join("images", "obstacle1.png")), (50, 50))
-            finalRect = finalImage.get_rect()
-            with self._action_lock:
-                finalRect.bottomleft = (self.dogX, self.dogY)
-            screen.blit(finalImage, finalRect)
